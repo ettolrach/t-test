@@ -1,47 +1,34 @@
-use std::{
-    fs::File,
-    io::{BufRead, Write},
-    path::Path,
-    time::Duration,
-};
+use std::{io::Write, path::Path};
 
 use clap::Parser;
-use t_test::differences::Differences;
+use t_test::{error::Error, observations::{Observations, parse}};
 
-use crate::{cli::Args, error::Error};
+use crate::{cli::Args};
 
 mod cli;
-mod error;
 
-fn write_results(timings: &Differences, path: &Path) -> std::io::Result<()> {
+fn write_results(observations: &Observations, path: &Path) -> std::io::Result<()> {
     if path.try_exists()? {
         std::fs::remove_file(path)?;
     }
     let mut file = std::fs::File::create_new(path)?;
     file.write("{".as_bytes())?;
-    file.write(timings.to_json().as_bytes())?;
+    file.write(observations.to_json().as_bytes())?;
     file.write("\n}\n".as_bytes())?;
     Ok(())
 }
 
 fn main() -> Result<(), Error> {
     let Args {
-        first,
-        second,
+        input,
         output,
+        mean,
         quiet,
     }: Args = Args::parse();
 
-    let first_times = parse(&first)?;
-    let second_times = parse(&second)?;
+    let observations = parse(&input)?;
 
-    let timings: Differences = Differences::new(
-        first_times
-            .into_iter()
-            .zip(second_times.into_iter())
-            .map(|(a, b)| a.as_secs_f64() - b.as_secs_f64())
-            .collect(),
-    );
+    let timings: Observations = Observations::new(observations, mean);
     if let Some(path) = output {
         write_results(&timings, &path)?;
     }

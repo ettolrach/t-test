@@ -3,7 +3,7 @@ use std::{
 };
 
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum Error {
+pub enum Error {
     #[error("failure during file read")]
     Io(#[from] std::io::Error),
     #[error("bad format in file, contents weren't valid f64s")]

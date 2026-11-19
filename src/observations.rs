@@ -1,18 +1,22 @@
-use std::{fmt::Display, time::Duration};
+use std::{fmt::Display, fs::File, io::BufRead, path::Path};
 
-use crate::tables::one_sided_value;
+use crate::{error::Error, tables::one_sided_value};
 
 use rand::prelude::*;
 
 #[derive(Clone)]
-pub struct Differences {
-    /// A list of differences.
+pub struct Observations {
+    /// A list of observations.
     xs: Vec<f64>,
+    /// The population mean. For example, if `self.xs` is a list of differences between program A
+    /// and program B, the population mean would be 0, as the null hypothesis is that there is a
+    /// speed-up of 0 time units.
+    population_mean: f64,
 }
-impl Differences {
-    pub fn new(mut xs: Vec<f64>) -> Self {
+impl Observations {
+    pub fn new(mut xs: Vec<f64>, population_mean: f64) -> Self {
         xs.sort_unstable_by(f64::total_cmp);
-        Self { xs }
+        Self { xs, population_mean }
     }
     pub fn min(&self) -> f64 {
         self.xs[0]
@@ -84,7 +88,7 @@ impl Differences {
     }
     pub fn t(&self) -> f64 {
         let n = f64::from(u32::try_from(self.xs.len()).unwrap());
-        self.mean() / (self.std_deviation() / n.sqrt())
+        (self.mean() - self.population_mean) / (self.std_deviation() / n.sqrt())
     }
     /// Is p < 0.05?
     pub fn p(&self) -> bool {
@@ -128,7 +132,7 @@ impl Differences {
     }
 }
 
-impl Display for Differences {
+impl Display for Observations {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -147,26 +151,7 @@ impl Display for Differences {
     }
 }
 
-impl<I: IntoIterator<Item = Duration>> From<[I; 2]> for Differences {
-    fn from([first_times, second_times]: [I; 2]) -> Self {
-        Differences::new(
-        first_times
-            .into_iter()
-            .zip(second_times.into_iter())
-            .map(|(a, b)| a.as_secs_f64() - b.as_secs_f64())
-            .collect(),
-        )
-    }
-}
-
-impl<I: IntoIterator<Item = [Duration; 2]>> From<I> for Differences {
-    fn from(value: I) -> Self {
-        Differences { xs: value.into_iter().map(|(a, b)| a.as_secs_f64() - b.as_secs_f64())
-            .collect() }
-    }
-}
-
-fn parse(path: &Path) -> Result<Vec<Duration>, Error> {
+pub fn parse(path: &Path) -> Result<Vec<f64>, Error> {
     let file = File::open(path)?;
     std::io::BufReader::new(file)
         .lines()
@@ -174,7 +159,6 @@ fn parse(path: &Path) -> Result<Vec<Duration>, Error> {
         .filter(|s| if let Ok(s) = &s { !s.is_empty() } else { true })
         .map(|res| {
             res.and_then(|s| s.parse().map_err(Into::into))
-                .map(Duration::from_secs_f64)
         })
         .collect()
 }
